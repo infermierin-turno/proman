@@ -1,0 +1,14 @@
+# File di configurazione e credenziali (esclusi per sicurezza)
+config.php
+blood/config_sangue.php
+.env
+
+# Cartelle di sistema e file temporanei
+.DS_Store
+Thumbs.db
+vendor/
+node_modules/
+
+# File di log
+*.log
+error_log
