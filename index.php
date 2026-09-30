@@ -21,7 +21,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Interrogazione della tabella medici su Supabase filtrando per email
         $risultato = supabase_request("medici?email=eq." . urlencode($email) . "&select=*");
 
-        if (!empty($risultato) && isset($risultato[0])) {
+        // DEBUG TEMPORANEO: se c'è un errore restituito da Supabase (es. problemi RLS), lo mostriamo
+        if (isset($risultato['error'])) {
+            $errore = "Errore Supabase: " . (is_array($risultato['error']) ? json_encode($risultato['error']) : $risultato['error']) . 
+                      (isset($risultato['details']) ? " - " . json_encode($risultato['details']) : "");
+        } elseif (!empty($risultato) && isset($risultato[0])) {
             $utente = $risultato[0];
 
             // Verifica della password confrontandola con 'password_hash' presente sul DB
