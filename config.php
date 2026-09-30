@@ -3,7 +3,7 @@
 // Regola: Da includere con require_once in tutte le pagine
 
 define('SUPABASE_URL', 'https://ruvdlcgsmtwszxsposjt.supabase.co');
-define('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1dmRsY2dzbXR3c3p4c3Bvc2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNjQ4MzksImV4cCI6MjA5ODc0MDgzOX0.V_nFon6WsICyaiiN1bujrg5P9ORKb8-L1eMBlCFKZF8');
+define('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1dmRsY2dzbXR3c3p4c3Bvc2p0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzE2NDgzOSwiZXhwIjoyMDk4NzQwODM5fQ.BPMqVhDi0oY2cez6lYfMr7DDKZTJNcHa3_bnHGKELc0');
 
 /**
  * Funzione unificata per eseguire richieste cURL verso le API REST di Supabase
