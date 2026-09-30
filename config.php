@@ -3,7 +3,7 @@
 // Regola: Da includere con require_once in tutte le pagine
 
 define('SUPABASE_URL', 'https://ruvdlcgsmtwszxsposjt.supabase.co');
-define('SUPABASE_KEY', 'sb_secret_fqVYNDaIwgECNPyxsKwyVA_vBsjCSPB');
+define('SUPABASE_KEY', 'sb_secret_URGaWu5QrQTNkdu0fz6lEw_WbIe6ikL');
 
 /**
  * Funzione unificata per eseguire richieste cURL verso le API REST di Supabase
