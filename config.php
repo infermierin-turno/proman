@@ -2,14 +2,15 @@
 // config.php - Configurazione centrale e funzioni per Supabase
 // Regola: Da includere con require_once in tutte le pagine
 
-define('SUPABASE_URL', 'https://ruvdlcgsmtwszxsposjt.supabase.co');
-define('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1dmRsY2dzbXR3c3p4c3Bvc2p0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzE2NDgzOSwiZXhwIjoyMDk4NzQwODM5fQ.BPMqVhDi0oY2cez6lYfMr7DDKZTJNcHa3_bnHGKELc0');
+// Utilizzo delle variabili d'ambiente di Render con fallback sicuro
+define('SUPABASE_URL', getenv('SUPABASE_URL') ?: 'https://ruvdlcgsmtwszxsposjt.supabase.co');
+define('SUPABASE_KEY', getenv('SUPABASE_KEY') ?: 'BPMqVhDi0oY2cez6lYfMr7DDKZTJNcHa3_bnHGKELc0');
 
 /**
  * Funzione unificata per eseguire richieste cURL verso le API REST di Supabase
  */
 function supabase_request($endpoint, $method = 'GET', $data = null) {
-    $url = SUPABASE_URL . '/rest/v1/' . $endpoint;
+    $url = SUPABASE_URL . '/rest/v1/' . ltrim($endpoint, '/');
     
     $headers = [
         'apikey: ' . SUPABASE_KEY,
@@ -24,11 +25,11 @@ function supabase_request($endpoint, $method = 'GET', $data = null) {
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     
-    // Timeout ridotti per evitare blocchi a cascata su Tophost
+    // Timeout ridotti per evitare blocchi a cascata
     curl_setopt($ch, CURLOPT_TIMEOUT, 5);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
     
-    // Soluzione cruciale per server Tophost: forza IPv4 ed evita problemi di risoluzione SSL
+    // Soluzione cruciale: forza IPv4 ed evita problemi di risoluzione SSL
     curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
