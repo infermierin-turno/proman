@@ -70,7 +70,6 @@ if (is_array($_SESSION['utente'])) {
     $possibile_id = $_SESSION['utente']['id'] ?? $_SESSION['utente']['user_id'] ?? null;
     $email_utente = $_SESSION['utente']['email'] ?? null;
 
-    // Verifichiamo se l'ID esiste davvero nella tabella utenti di Supabase
     if (!empty($possibile_id)) {
         $check_user = supabase_request("utenti?id=eq.$possibile_id&select=id");
         if (!empty($check_user) && !isset($check_user['error'])) {
@@ -78,7 +77,6 @@ if (is_array($_SESSION['utente'])) {
         }
     }
     
-    // Se non trovato per ID ma abbiamo l'email, proviamo a cercarlo per email
     if (!$utente_id && !empty($email_utente)) {
         $check_email = supabase_request("utenti?email=eq." . urlencode($email_utente) . "&select=id");
         if (!empty($check_email) && !isset($check_email['error'])) {
@@ -86,7 +84,6 @@ if (is_array($_SESSION['utente'])) {
         }
     }
 } else {
-    // Se la sessione è una stringa (es. solo email)
     $email_sessione = $_SESSION['utente'];
     $check_email = supabase_request("utenti?email=eq." . urlencode($email_sessione) . "&select=id,studio_id");
     if (!empty($check_email) && !isset($check_email['error'])) {
@@ -149,8 +146,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
         $nome_originale = basename($_FILES['file_fisico']['name']);
         $mime_type = mime_content_type($file_tmp) ?: 'application/octet-stream';
         
-        $prefix = $studio_id ? $studio_id : 'general';
-        $nome_file_storage = $prefix . '_' . time() . '_' . preg_replace('/[^a-zA-Z0-9_\.-]/', '_', $nome_originale);
+        // Nome file pulito per evitare caratteri speciali nello storage
+        $nome_file_storage = time() . '_' . preg_replace('/[^a-zA-Z0-9_\.-]/', '_', $nome_originale);
         
         $url_storage = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/repository/' . $nome_file_storage;
         $file_data = file_get_contents($file_tmp);
@@ -173,6 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
         curl_close($ch);
 
         if ($http_code_storage >= 200 && $http_code_storage < 300) {
+            // URL pubblico corretto per Supabase Storage
             $url_pubblico = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/public/repository/' . $nome_file_storage;
 
             $nuovo_doc = [
@@ -180,7 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
                 'descrizione' => $descrizione,
                 'file_url' => $url_pubblico,
                 'studio_id' => $studio_id ?: null,
-                'caricato_da' => $utente_id ?: null // Se l'utente non viene trovato, viene inviato null per evitare violazioni FK
+                'caricato_da' => $utente_id ?: null
             ];
 
             $risultato = supabase_request('repository', 'POST', $nuovo_doc);
@@ -237,7 +235,7 @@ if (isset($documenti['error']) || !is_array($documenti)) {
 
 <div class="container main-content">
     <?php if (!empty($messaggio)): ?><div class="alert alert-success rounded-4"><?php echo htmlspecialchars($messaggio); ?></div><?php endif; ?>
-    <?php if (!empty($errore)): ?><div class="alert alert-danger rounded-4"><?php echo htmlspecialchars($errore); ?></div><?php endif; ?>
+    <?php if (!empty($errore)): ?><center><div class="alert alert-danger rounded-4"><?php echo htmlspecialchars($errore); ?></div></center><?php endif; ?>
 
     <div class="card border-0 shadow-sm rounded-4 p-4">
         <div class="table-responsive">
