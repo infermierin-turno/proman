@@ -1,6 +1,6 @@
 <?php session_start(); if (!isset($_SESSION['utente'])) { header("Location: index.php"); exit; } ?>
 <?php
-// repository.php - Archivio Modulistica e Documenti Studio Medico
+// repository.php - Archivio Modulistica e Documenti Studio Medico (Multitenant)
 
 // Configurazione credenziali Supabase
 if (!defined('SUPABASE_URL')) {
@@ -67,16 +67,22 @@ if (is_array($_SESSION['utente'])) {
     $email_utente = $_SESSION['utente']['email'] ?? null;
 
     if (!empty($possibile_id)) {
-        $check_user = supabase_request("utenti?id=eq.$possibile_id&select=id");
+        $check_user = supabase_request("utenti?id=eq.$possibile_id&select=id,studio_id");
         if (!empty($check_user) && !isset($check_user['error'])) {
             $utente_id = $possibile_id;
+            if (empty($studio_id)) {
+                $studio_id = $check_user[0]['studio_id'] ?? null;
+            }
         }
     }
     
     if (!$utente_id && !empty($email_utente)) {
-        $check_email = supabase_request("utenti?email=eq." . urlencode($email_utente) . "&select=id");
+        $check_email = supabase_request("utenti?email=eq." . urlencode($email_utente) . "&select=id,studio_id");
         if (!empty($check_email) && !isset($check_email['error'])) {
             $utente_id = $check_email[0]['id'];
+            if (empty($studio_id)) {
+                $studio_id = $check_email[0]['studio_id'] ?? null;
+            }
         }
     }
 } else {
@@ -88,14 +94,27 @@ if (is_array($_SESSION['utente'])) {
     }
 }
 
+// Fallback di sicurezza se lo studio_id non è ancora valorizzato in sessione
+if (empty($studio_id) && !empty($utente_id)) {
+    $user_info = supabase_request("utenti?id=eq.$utente_id&select=studio_id");
+    if (!empty($user_info) && !isset($user_info['error'])) {
+        $studio_id = $user_info[0]['studio_id'] ?? null;
+    }
+}
+
 $messaggio = '';
 $errore = '';
 
-// 1. Gestione Eliminazione Documento
+// 1. Gestione Eliminazione Documento (con controllo di sicurezza sullo studio)
 if (isset($_GET['elimina']) && !empty($_GET['elimina'])) {
     $id_da_eliminare = $_GET['elimina'];
     
-    $doc_da_cancellare = supabase_request("repository?id=eq.$id_da_eliminare&select=file_url");
+    // Verifica che il documento appartenga allo studio corrente prima di eliminarlo
+    $query_verifica = "repository?id=eq.$id_da_eliminare&select=file_url,studio_id";
+    if (!empty($studio_id)) {
+        $query_verifica .= "&studio_id=eq.$studio_id";
+    }
+    $doc_da_cancellare = supabase_request($query_verifica);
     
     if (!empty($doc_da_cancellare) && !isset($doc_da_cancellare['error'])) {
         $percorso_file_url = $doc_da_cancellare[0]['file_url'];
@@ -126,7 +145,7 @@ if (isset($_GET['elimina']) && !empty($_GET['elimina'])) {
             $messaggio = "Documento eliminato con successo!";
         }
     } else {
-        $errore = "Documento non trovato o già eliminato.";
+        $errore = "Documento non trovato o non autorizzato all'eliminazione.";
     }
 }
 
@@ -189,8 +208,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
     }
 }
 
-// Recupero documenti
-$documenti = supabase_request("repository?order=created_at.desc&select=*");
+// Recupero documenti filtrati rigorosamente per lo studio corrente (Multitenant)
+$endpoint_docs = "repository?order=created_at.desc&select=*";
+if (!empty($studio_id)) {
+    $endpoint_docs .= "&studio_id=eq.$studio_id";
+} else {
+    // Se per qualche motivo lo studio_id non è definito, non mostriamo nulla per sicurezza
+    $endpoint_docs .= "&studio_id=is.null";
+}
+
+$documenti = supabase_request($endpoint_docs);
 if (isset($documenti['error']) || !is_array($documenti)) {
     $documenti = [];
 }
@@ -250,7 +277,7 @@ if (isset($documenti['error']) || !is_array($documenti)) {
                         </td>
                     </tr>
                     <?php endforeach; else: ?>
-                    <tr><td colspan="3" class="text-center text-muted py-4">Nessun documento presente nel repository.</td></tr>
+                    <tr><td colspan="3" class="text-center text-muted py-4">Nessun documento presente nel repository per questo studio.</td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>
