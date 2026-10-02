@@ -120,12 +120,6 @@ if (empty($controllo_id)) {
 $messaggio_successo = '';
 $messaggio_errore = '';
 
-// Assicuriamoci che la cartella uploads esista
-$cartella_upload = 'uploads/';
-if (!is_dir($cartella_upload)) {
-    mkdir($cartella_upload, 0755, true);
-}
-
 // Recupero preliminare del controllo per identificare il paziente_id e la data attuale
 $risultato_controllo_pre = supabase_request('controlli?id=eq.' . urlencode($controllo_id), 'GET');
 if (empty($risultato_controllo_pre) || isset($risultato_controllo_pre['error'])) {
@@ -203,7 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $file_path_esistente = (!empty($risultato_corrente) && !isset($risultato_corrente['error'])) ? ($risultato_corrente[0]['file_path'] ?? '') : '';
         $log_esistente = (!empty($risultato_corrente) && !isset($risultato_corrente['error'])) ? ($risultato_corrente[0]['log_modifiche'] ?? '') : '';
 
-        // Gestione caricamento file multipli
+        // Gestione caricamento file multipli direttamente su Supabase Storage
         $nuovi_file_caricati = [];
         if (isset($_FILES['allegati']) && !empty($_FILES['allegati']['name'][0])) {
             $tot_file = count($_FILES['allegati']['name']);
@@ -216,11 +210,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $estensione = strtolower(pathinfo($nome_originale, PATHINFO_EXTENSION));
                     
                     if (in_array($estensione, $estensioni_consentite)) {
-                        $nome_file_unico = 'visita_' . $controllo_id . '_' . time() . '_' . $i . '.' . $estensione;
-                        $destinazione = $cartella_upload . $nome_file_unico;
+                        $mime_type = mime_content_type($file_tmp) ?: 'application/octet-stream';
+                        $nome_file_storage = 'visita_' . $controllo_id . '_' . time() . '_' . $i . '.' . $estensione;
                         
-                        if (move_uploaded_file($file_tmp, $destinazione)) {
-                            $nuovi_file_caricati[] = $destinazione;
+                        // Upload cURL su Supabase Storage (bucket 'repository')
+                        $url_storage = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/repository/' . $nome_file_storage;
+                        $file_data = file_get_contents($file_tmp);
+
+                        $ch = curl_init($url_storage);
+                        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+                        curl_setopt($ch, CURLOPT_POSTFIELDS, $file_data);
+                        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+                        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                            'apikey: ' . SUPABASE_KEY,
+                            'Authorization: Bearer ' . SUPABASE_KEY,
+                            'Content-Type: ' . $mime_type
+                        ]);
+
+                        $response_storage = curl_exec($ch);
+                        $http_code_storage = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                        curl_close($ch);
+
+                        if ($http_code_storage >= 200 && $http_code_storage < 300) {
+                            // Genera URL pubblico permanente su Supabase Storage
+                            $url_pubblico = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/public/repository/' . $nome_file_storage;
+                            $nuovi_file_caricati[] = $url_pubblico;
                         }
                     }
                 }
@@ -261,7 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $risultato_update = supabase_request('controlli?id=eq.' . urlencode($controllo_id), 'PATCH', $dati_aggiornamento);
 
             if (empty($risultato_update) || !isset($risultato_update['error'])) {
-                $messaggio_successo = "Visita e file multipli salvati con successo!";
+                $messaggio_successo = "Visita e allegati salvati con successo nel cloud!";
                 $data_controllo_corrente = $data_controllo_finale;
                 $orario_attuale = $orario_inviato;
             } else {
@@ -675,11 +691,11 @@ $note_pulita = trim($note_pulita);
                 <textarea id="note" name="note"><?php echo htmlspecialchars($note_pulita); ?></textarea>
             </div>
 
-            <!-- GESTIONE ALLEGATI MULTIPLI -->
+            <!-- GESTIONE ALLEGATI MULTIPLI SU SUPABASE CLOUD -->
             <div class="form-group no-print">
                 <label for="allegati">Allega File / Documenti / Immagini / Video:</label>
                 <input type="file" id="allegati" name="allegati[]" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.mp4,.mov,.avi,.webm,.svg">
-                <small style="color: #666; display: block; margin-top: 4px;">Puoi selezionare più file contemporaneamente (PDF, Immagini, Word, Video).</small>
+                <small style="color: #666; display: block; margin-top: 4px;">I file vengono salvati direttamente nel cloud Supabase Storage (persistenti).</small>
             </div>
 
             <?php if (!empty($controllo['file_path'])): ?>
