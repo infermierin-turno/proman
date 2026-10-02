@@ -6,9 +6,9 @@ if (!isset($_SESSION['utente'])) {
     exit;
 }
 
-// Configurazione credenziali Supabase se non definite altrove
+// Configurazione credenziali Supabase (rimuoviamo eventuali slash finali per sicurezza)
 if (!defined('SUPABASE_URL')) {
-    define('SUPABASE_URL', getenv('SUPABASE_URL'));
+    define('SUPABASE_URL', rtrim(getenv('SUPABASE_URL'), '/'));
 }
 if (!defined('SUPABASE_KEY')) {
     define('SUPABASE_KEY', getenv('SUPABASE_KEY'));
@@ -21,7 +21,10 @@ if (file_exists(__DIR__ . '/api_helper_sangue.php')) {
 
 if (!function_exists('supabase_request')) {
     function supabase_request($endpoint, $method = 'GET', $data = null, $custom_headers = []) {
-        $url = SUPABASE_URL . '/rest/v1/' . $endpoint;
+        $base_url = rtrim(SUPABASE_URL, '/');
+        $endpoint = ltrim($endpoint, '/');
+        $url = $base_url . '/rest/v1/' . $endpoint;
+        
         $headers = [
             'apikey: ' . SUPABASE_KEY,
             'Authorization: Bearer ' . SUPABASE_KEY,
@@ -35,6 +38,8 @@ if (!function_exists('supabase_request')) {
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
 
         if ($data !== null) {
             curl_setopt($ch, CURLOPT_POSTFIELDS, is_array($data) ? json_encode($data) : $data);
@@ -43,13 +48,14 @@ if (!function_exists('supabase_request')) {
 
         $response = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_error = curl_error($ch);
         curl_close($ch);
 
-        $decoded = json_decode($response, true);
-        if ($http_code >= 400) {
-            return ['error' => $decoded['message'] ?? $response];
+        if ($http_code >= 400 || !empty($curl_error)) {
+            $decoded = json_decode($response, true);
+            return ['error' => $decoded['message'] ?? $response ?: $curl_error];
         }
-        return $decoded;
+        return json_decode($response, true);
     }
 }
 
@@ -73,17 +79,18 @@ if (isset($_GET['elimina']) && !empty($_GET['elimina'])) {
     if (!empty($doc_da_cancellare) && !isset($doc_da_cancellare['error'])) {
         $percorso_file_url = $doc_da_cancellare[0]['file_url'];
         
-        // Estraiamo il nome del file dall'URL pubblico di Supabase Storage per eliminarlo dal bucket
-        // Esempio URL: .../storage/v1/object/public/repository/nomefile.pdf
+        // Estraiamo il nome del file dall'URL pubblico di Supabase Storage
         $parti_url = explode('/repository/', $percorso_file_url);
         if (isset($parti_url[1])) {
             $nome_file_storage = $parti_url[1];
             
             // Chiamata cURL a Supabase Storage DELETE
-            $url_storage = SUPABASE_URL . '/storage/v1/object/repository/' . $nome_file_storage;
+            $url_storage = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/repository/' . $nome_file_storage;
             $ch = curl_init($url_storage);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
                 'apikey: ' . SUPABASE_KEY,
                 'Authorization: Bearer ' . SUPABASE_KEY
@@ -115,19 +122,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
     } else {
         $file_tmp = $_FILES['file_fisico']['tmp_name'];
         $nome_originale = basename($_FILES['file_fisico']['name']);
-        $mime_type = mime_content_type($file_tmp);
+        $mime_type = mime_content_type($file_tmp) ?: 'application/octet-stream';
         
         // Nome unico per il file nel bucket Supabase
         $nome_file_storage = $studio_id . '_' . time() . '_' . preg_replace('/[^a-zA-Z0-9_\.-]/', '_', $nome_originale);
         
-        // Endpoint Supabase Storage (Assicurati di creare un bucket pubblico chiamato 'repository' nella tua dashboard Supabase)
-        $url_storage = SUPABASE_URL . '/storage/v1/object/repository/' . $nome_file_storage;
+        // Endpoint Supabase Storage
+        $url_storage = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/repository/' . $nome_file_storage;
         $file_data = file_get_contents($file_tmp);
 
         $ch = curl_init($url_storage);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
         curl_setopt($ch, CURLOPT_POSTFIELDS, $file_data);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Evita errori di certificato SSL su Render
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'apikey: ' . SUPABASE_KEY,
             'Authorization: Bearer ' . SUPABASE_KEY,
@@ -136,11 +145,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
 
         $response_storage = curl_exec($ch);
         $http_code_storage = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_error_storage = curl_error($ch);
         curl_close($ch);
 
         if ($http_code_storage >= 200 && $http_code_storage < 300) {
             // URL pubblico permanente su Supabase Storage
-            $url_pubblico = SUPABASE_URL . '/storage/v1/object/public/repository/' . $nome_file_storage;
+            $url_pubblico = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/public/repository/' . $nome_file_storage;
 
             $nuovo_doc = [
                 'titolo' => $titolo,
@@ -157,7 +167,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
                 $messaggio = "Documento caricato e salvato con successo nel cloud!";
             }
         } else {
-            $errore = "Errore durante il caricamento del file su Supabase Storage (HTTP $http_code_storage): " . $response_storage;
+            $dettaglio_errore = $response_storage ?: $curl_error_storage;
+            $errore = "Errore caricamento Storage (HTTP $http_code_storage): " . htmlspecialchars($dettaglio_errore);
         }
     }
 }
