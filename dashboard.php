@@ -212,7 +212,7 @@ $riassunto_tipi = !empty($lista_stringhe_tipi) ? implode(', ', $lista_stringhe_t
                         <i class="fa-solid fa-circle-exclamation fs-3 me-3 text-danger"></i>
                         <div>
                             <h6 class="fw-bold mb-1">Abbonamento Scaduto</h6>
-                            <p class="mb-0 small">Il tuo abbonamento è scaduto il <?php echo ($info_abbonamento['data_scadenza'] && $info_abbonamento['data_scadenza'] !== 'N/D') ? date('d/m/Y', strtotime($info_abbonamento['data_scadenza'])) : 'recentemente'; ?>.</p>
+                            <p class="mb-0 small">Il tuo abbonamento è scaduto <?php echo ($info_abbonamento['data_scadenza'] && $info_abbonamento['data_scadenza'] !== 'N/D') ? date('d/m/Y', strtotime($info_abbonamento['data_scadenza'])) : 'recentemente'; ?>.</p>
                         </div>
                     </div>
                     <a href="mailto:gianden71@gmail.com?subject=Rinnovo%20Abbonamento" class="btn btn-danger btn-sm px-3 rounded-pill fw-bold shadow-sm">Rinnova Ora</a>
