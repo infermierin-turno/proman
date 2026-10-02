@@ -90,7 +90,6 @@ if (is_array($_SESSION['utente'])) {
 
 $messaggio = '';
 $errore = '';
-$debug_info = '';
 
 // 1. Gestione Eliminazione Documento
 if (isset($_GET['elimina']) && !empty($_GET['elimina'])) {
@@ -145,7 +144,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
         
         $nome_file_storage = time() . '_' . preg_replace('/[^a-zA-Z0-9_\.-]/', '_', $nome_originale);
         
-        // Endpoint Storage Supabase
         $url_storage = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/repository/' . $nome_file_storage;
         $file_data = file_get_contents($file_tmp);
 
@@ -166,14 +164,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
         $curl_error_storage = curl_error($ch);
         curl_close($ch);
 
-        // DEBUG DETTAGLIATO
-        $debug_info = "<strong>URL cURL Storage Chiamato:</strong> " . htmlspecialchars($url_storage) . "<br>";
-        $debug_info .= "<strong>HTTP Code Storage:</strong> " . $http_code_storage . "<br>";
-        $debug_info .= "<strong>Risposta Grezza Storage:</strong> " . htmlspecialchars($response_storage ?: 'Nessuna risposta o errore cURL: ' . $curl_error_storage) . "<br>";
-
         if ($http_code_storage >= 200 && $http_code_storage < 300) {
             $url_pubblico = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/public/repository/' . $nome_file_storage;
-            $debug_info .= "<strong>URL Pubblico Generato:</strong> " . htmlspecialchars($url_pubblico) . "<br>";
 
             $nuovo_doc = [
                 'titolo' => $titolo,
@@ -238,14 +230,6 @@ if (isset($documenti['error']) || !is_array($documenti)) {
 <div class="container main-content">
     <?php if (!empty($messaggio)): ?><div class="alert alert-success rounded-4"><?php echo htmlspecialchars($messaggio); ?></div><?php endif; ?>
     <?php if (!empty($errore)): ?><div class="alert alert-danger rounded-4"><?php echo htmlspecialchars($errore); ?></div><?php endif; ?>
-    
-    <!-- BOX DI DEBUG ATTIVO -->
-    <?php if (!empty($debug_info)): ?>
-    <div class="alert alert-info rounded-4 border-0 shadow-sm mb-4">
-        <h6 class="fw-bold text-primary mb-2"><i class="fa-solid fa-bug me-1"></i> Pannello di Debug Storage</h6>
-        <div class="small font-monospace bg-white p-3 rounded-3 border"><?php echo $debug_info; ?></div>
-    </div>
-    <?php endif; ?>
 
     <div class="card border-0 shadow-sm rounded-4 p-4">
         <div class="table-responsive">
