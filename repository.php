@@ -61,13 +61,38 @@ if (!function_exists('supabase_request')) {
     }
 }
 
-// Recupero dati utente e studio_id dalla sessione
+// Identificazione sicura dell'utente e dello studio dalla sessione
 $utente_id = null;
 $studio_id = null;
 
 if (is_array($_SESSION['utente'])) {
-    $utente_id = $_SESSION['utente']['id'] ?? $_SESSION['utente']['user_id'] ?? null;
     $studio_id = $_SESSION['utente']['studio_id'] ?? null;
+    $possibile_id = $_SESSION['utente']['id'] ?? $_SESSION['utente']['user_id'] ?? null;
+    $email_utente = $_SESSION['utente']['email'] ?? null;
+
+    // Verifichiamo se l'ID esiste davvero nella tabella utenti di Supabase
+    if (!empty($possibile_id)) {
+        $check_user = supabase_request("utenti?id=eq.$possibile_id&select=id");
+        if (!empty($check_user) && !isset($check_user['error'])) {
+            $utente_id = $possibile_id;
+        }
+    }
+    
+    // Se non trovato per ID ma abbiamo l'email, proviamo a cercarlo per email
+    if (!$utente_id && !empty($email_utente)) {
+        $check_email = supabase_request("utenti?email=eq." . urlencode($email_utente) . "&select=id");
+        if (!empty($check_email) && !isset($check_email['error'])) {
+            $utente_id = $check_email[0]['id'];
+        }
+    }
+} else {
+    // Se la sessione è una stringa (es. solo email)
+    $email_sessione = $_SESSION['utente'];
+    $check_email = supabase_request("utenti?email=eq." . urlencode($email_sessione) . "&select=id,studio_id");
+    if (!empty($check_email) && !isset($check_email['error'])) {
+        $utente_id = $check_email[0]['id'];
+        $studio_id = $check_email[0]['studio_id'] ?? null;
+    }
 }
 
 $messaggio = '';
@@ -77,19 +102,11 @@ $errore = '';
 if (isset($_GET['elimina']) && !empty($_GET['elimina'])) {
     $id_da_eliminare = $_GET['elimina'];
     
-    // Cerchiamo il documento tramite UUID (senza vincoli rigidi se studio_id è null nel db)
-    $query_verifica = "repository?id=eq.$id_da_eliminare&select=file_url,studio_id";
-    if (!empty($studio_id)) {
-        // Se lo studio è valorizzato in sessione, permettiamo la cancellazione se corrisponde o se è null
-        // Per semplicità e sicurezza robusta, verifichiamo solo l'esistenza del record UUID
-    }
-    
     $doc_da_cancellare = supabase_request("repository?id=eq.$id_da_eliminare&select=file_url");
     
     if (!empty($doc_da_cancellare) && !isset($doc_da_cancellare['error'])) {
         $percorso_file_url = $doc_da_cancellare[0]['file_url'];
         
-        // Estrazione nome file dal bucket Supabase Storage
         $parti_url = explode('/repository/', $percorso_file_url);
         if (isset($parti_url[1])) {
             $nome_file_storage = $parti_url[1];
@@ -108,7 +125,6 @@ if (isset($_GET['elimina']) && !empty($_GET['elimina'])) {
             curl_close($ch);
         }
         
-        // Eliminazione riga dal database tramite UUID
         $risultato_del = supabase_request("repository?id=eq.$id_da_eliminare", 'DELETE');
         
         if (isset($risultato_del['error'])) {
@@ -133,7 +149,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
         $nome_originale = basename($_FILES['file_fisico']['name']);
         $mime_type = mime_content_type($file_tmp) ?: 'application/octet-stream';
         
-        // Nome unico per il file nel bucket Supabase
         $prefix = $studio_id ? $studio_id : 'general';
         $nome_file_storage = $prefix . '_' . time() . '_' . preg_replace('/[^a-zA-Z0-9_\.-]/', '_', $nome_originale);
         
@@ -165,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
                 'descrizione' => $descrizione,
                 'file_url' => $url_pubblico,
                 'studio_id' => $studio_id ?: null,
-                'caricato_da' => $utente_id ?: null
+                'caricato_da' => $utente_id ?: null // Se l'utente non viene trovato, viene inviato null per evitare violazioni FK
             ];
 
             $risultato = supabase_request('repository', 'POST', $nuovo_doc);
@@ -182,13 +197,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
     }
 }
 
-// Recupero documenti ordinati per data (gestendo eventuali record senza studio_id obbligatorio)
-$query_get = "repository?order=created_at.desc&select=*";
-if (!empty($studio_id)) {
-    // Se vuoi filtrare per studio ma includere anche quelli null, oppure filtrare direttamente:
-    // $query_get = "repository?or=(studio_id.eq.$studio_id,studio_id.is.null)&order=created_at.desc&select=*";
-}
-$documenti = supabase_request($query_get);
+// Recupero documenti
+$documenti = supabase_request("repository?order=created_at.desc&select=*");
 if (isset($documenti['error']) || !is_array($documenti)) {
     $documenti = [];
 }
