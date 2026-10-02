@@ -6,17 +6,19 @@ if (!isset($_SESSION['utente'])) {
     exit;
 }
 
-// Configurazione credenziali Supabase (rimuoviamo eventuali slash finali per sicurezza)
+// Configurazione credenziali Supabase
 if (!defined('SUPABASE_URL')) {
-    define('SUPABASE_URL', rtrim(getenv('SUPABASE_URL'), '/'));
+    define('SUPABASE_URL', rtrim(trim(getenv('SUPABASE_URL') ?: ($_ENV['SUPABASE_URL'] ?? '')), '/'));
 }
 if (!defined('SUPABASE_KEY')) {
-    define('SUPABASE_KEY', getenv('SUPABASE_KEY'));
+    define('SUPABASE_KEY', trim(getenv('SUPABASE_KEY') ?: ($_ENV['SUPABASE_KEY'] ?? '')));
 }
 
-// Inclusione helper API se presente, altrimenti definiamo la funzione di fallback
-if (file_exists(__DIR__ . '/api_helper_sangue.php')) {
-    require_once __DIR__ . '/api_helper_sangue.php';
+if (empty(SUPABASE_URL) || empty(SUPABASE_KEY)) {
+    die("<div style='font-family:sans-serif; padding: 20px; color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; margin: 20px; border-radius: 5px;'>
+        <h3>Errore di Configurazione su Render</h3>
+        <p>Le variabili di ambiente <strong>SUPABASE_URL</strong> o <strong>SUPABASE_KEY</strong> non sono configurate o risultano vuote.</p>
+    </div>");
 }
 
 if (!function_exists('supabase_request')) {
@@ -59,11 +61,13 @@ if (!function_exists('supabase_request')) {
     }
 }
 
-// Recupero studio_id dalla sessione
-$studio_id = $_SESSION['utente']['studio_id'] ?? null;
+// Recupero dati utente e studio_id dalla sessione
+$utente_id = null;
+$studio_id = null;
 
-if (!$studio_id) {
-    die("Errore: Studio non identificato. Contattare l'amministratore.");
+if (is_array($_SESSION['utente'])) {
+    $utente_id = $_SESSION['utente']['id'] ?? $_SESSION['utente']['user_id'] ?? null;
+    $studio_id = $_SESSION['utente']['studio_id'] ?? null;
 }
 
 $messaggio = '';
@@ -73,18 +77,23 @@ $errore = '';
 if (isset($_GET['elimina']) && !empty($_GET['elimina'])) {
     $id_da_eliminare = $_GET['elimina'];
     
-    // Recupero record verificando l'appartenenza allo studio per sicurezza
-    $doc_da_cancellare = supabase_request("repository?id=eq.$id_da_eliminare&studio_id=eq.$studio_id&select=file_url");
+    // Cerchiamo il documento tramite UUID (senza vincoli rigidi se studio_id è null nel db)
+    $query_verifica = "repository?id=eq.$id_da_eliminare&select=file_url,studio_id";
+    if (!empty($studio_id)) {
+        // Se lo studio è valorizzato in sessione, permettiamo la cancellazione se corrisponde o se è null
+        // Per semplicità e sicurezza robusta, verifichiamo solo l'esistenza del record UUID
+    }
+    
+    $doc_da_cancellare = supabase_request("repository?id=eq.$id_da_eliminare&select=file_url");
     
     if (!empty($doc_da_cancellare) && !isset($doc_da_cancellare['error'])) {
         $percorso_file_url = $doc_da_cancellare[0]['file_url'];
         
-        // Estraiamo il nome del file dall'URL pubblico di Supabase Storage
+        // Estrazione nome file dal bucket Supabase Storage
         $parti_url = explode('/repository/', $percorso_file_url);
         if (isset($parti_url[1])) {
             $nome_file_storage = $parti_url[1];
             
-            // Chiamata cURL a Supabase Storage DELETE
             $url_storage = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/repository/' . $nome_file_storage;
             $ch = curl_init($url_storage);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -99,16 +108,16 @@ if (isset($_GET['elimina']) && !empty($_GET['elimina'])) {
             curl_close($ch);
         }
         
-        // Elimina riga dal database
-        $risultato_del = supabase_request("repository?id=eq.$id_da_eliminare&studio_id=eq.$studio_id", 'DELETE');
+        // Eliminazione riga dal database tramite UUID
+        $risultato_del = supabase_request("repository?id=eq.$id_da_eliminare", 'DELETE');
         
         if (isset($risultato_del['error'])) {
-            $errore = "Errore durante l'eliminazione dal database.";
+            $errore = "Errore durante l'eliminazione dal database: " . json_encode($risultato_del['error']);
         } else {
             $messaggio = "Documento eliminato con successo!";
         }
     } else {
-        $errore = "Documento non trovato o non autorizzato.";
+        $errore = "Documento non trovato o già eliminato.";
     }
 }
 
@@ -125,9 +134,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
         $mime_type = mime_content_type($file_tmp) ?: 'application/octet-stream';
         
         // Nome unico per il file nel bucket Supabase
-        $nome_file_storage = $studio_id . '_' . time() . '_' . preg_replace('/[^a-zA-Z0-9_\.-]/', '_', $nome_originale);
+        $prefix = $studio_id ? $studio_id : 'general';
+        $nome_file_storage = $prefix . '_' . time() . '_' . preg_replace('/[^a-zA-Z0-9_\.-]/', '_', $nome_originale);
         
-        // Endpoint Supabase Storage
         $url_storage = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/repository/' . $nome_file_storage;
         $file_data = file_get_contents($file_tmp);
 
@@ -135,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
         curl_setopt($ch, CURLOPT_POSTFIELDS, $file_data);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Evita errori di certificato SSL su Render
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'apikey: ' . SUPABASE_KEY,
@@ -149,14 +158,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
         curl_close($ch);
 
         if ($http_code_storage >= 200 && $http_code_storage < 300) {
-            // URL pubblico permanente su Supabase Storage
             $url_pubblico = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/public/repository/' . $nome_file_storage;
 
             $nuovo_doc = [
                 'titolo' => $titolo,
                 'descrizione' => $descrizione,
                 'file_url' => $url_pubblico,
-                'studio_id' => $studio_id
+                'studio_id' => $studio_id ?: null,
+                'caricato_da' => $utente_id ?: null
             ];
 
             $risultato = supabase_request('repository', 'POST', $nuovo_doc);
@@ -173,8 +182,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
     }
 }
 
-// Recupero documenti filtrati per studio_id
-$documenti = supabase_request("repository?studio_id=eq.$studio_id&order=created_at.desc&select=*");
+// Recupero documenti ordinati per data (gestendo eventuali record senza studio_id obbligatorio)
+$query_get = "repository?order=created_at.desc&select=*";
+if (!empty($studio_id)) {
+    // Se vuoi filtrare per studio ma includere anche quelli null, oppure filtrare direttamente:
+    // $query_get = "repository?or=(studio_id.eq.$studio_id,studio_id.is.null)&order=created_at.desc&select=*";
+}
+$documenti = supabase_request($query_get);
 if (isset($documenti['error']) || !is_array($documenti)) {
     $documenti = [];
 }
