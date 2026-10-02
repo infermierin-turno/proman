@@ -628,24 +628,24 @@ $note_pulita = trim($note_pulita);
                     <label for="data_intervento">Data Intervento:</label>
                     <input type="date" id="data_intervento" name="data_intervento" value="<?php echo htmlspecialchars($controllo['data_intervento'] ?? ''); ?>">
                 </div>
+
+                <?php 
+                $val_c_tip_int = trim($controllo['tipologia_intervento'] ?? '');
+                $class_c_tip_int = ($val_c_tip_int === '') ? 'form-group is-empty-field' : 'form-group';
+                ?>
+                <div class="<?php echo $class_c_tip_int; ?>">
+                    <label for="tipologia_intervento">Tipologia Intervento:</label>
+                    <input type="text" id="tipologia_intervento" name="tipologia_intervento" value="<?php echo htmlspecialchars($controllo['tipologia_intervento'] ?? ''); ?>">
+                </div>
             </div>
 
             <?php 
-            $val_c_tipologia = trim($controllo['tipologia_intervento'] ?? '');
-            $class_c_tipologia = ($val_c_tipologia === '') ? 'form-group is-empty-field' : 'form-group';
+            $val_diagnosi = trim($controllo['diagnosi'] ?? '');
+            $class_diagnosi = ($val_diagnosi === '') ? 'form-group is-empty-field' : 'form-group';
             ?>
-            <div class="<?php echo $class_c_tipologia; ?>">
-                <label for="tipologia_intervento">Tipologia Intervento:</label>
-                <input type="text" id="tipologia_intervento" name="tipologia_intervento" value="<?php echo htmlspecialchars($controllo['tipologia_intervento'] ?? ''); ?>">
-            </div>
-
-            <?php 
-            $val_visita_diag = trim($controllo['diagnosi'] ?? '');
-            $class_visita_diag = ($val_visita_diag === '') ? 'form-group is-empty-field' : 'form-group';
-            ?>
-            <div class="<?php echo $class_visita_diag; ?>">
-                <label for="diagnosi_visita">Diagnosi:</label>
-                <textarea id="diagnosi_visita" name="diagnosi_visita" rows="2" oninput="autoResize(this)"><?php echo htmlspecialchars($controllo['diagnosi'] ?? ''); ?></textarea>
+            <div class="<?php echo $class_diagnosi; ?>">
+                <label for="diagnosi_visita">Diagnosi / Anamnesi:</label>
+                <textarea id="diagnosi_visita" name="diagnosi_visita"><?php echo htmlspecialchars($controllo['diagnosi'] ?? ''); ?></textarea>
             </div>
 
             <?php 
@@ -653,8 +653,8 @@ $note_pulita = trim($note_pulita);
             $class_esito = ($val_esito === '') ? 'form-group is-empty-field' : 'form-group';
             ?>
             <div class="<?php echo $class_esito; ?>">
-                <label for="esito">Esito / Referto:</label>
-                <textarea id="esito" name="esito" rows="3" oninput="autoResize(this)"><?php echo htmlspecialchars($controllo['esito'] ?? ''); ?></textarea>
+                <label for="esito">Esito / Esame Obiettivo:</label>
+                <textarea id="esito" name="esito"><?php echo htmlspecialchars($controllo['esito'] ?? ''); ?></textarea>
             </div>
 
             <?php 
@@ -662,136 +662,132 @@ $note_pulita = trim($note_pulita);
             $class_terapia = ($val_terapia === '') ? 'form-group is-empty-field' : 'form-group';
             ?>
             <div class="<?php echo $class_terapia; ?>">
-                <label for="terapia">Terapia:</label>
-                <textarea id="terapia" name="terapia" rows="2" oninput="autoResize(this)"><?php echo htmlspecialchars($controllo['terapia'] ?? ''); ?></textarea>
+                <label for="terapia">Terapia / Prescrizioni:</label>
+                <textarea id="terapia" name="terapia"><?php echo htmlspecialchars($controllo['terapia'] ?? ''); ?></textarea>
             </div>
 
             <?php 
-            $class_note = ($note_pulita === '') ? 'form-group is-empty-field' : 'form-group';
+            $val_note = trim($note_pulita);
+            $class_note = ($val_note === '') ? 'form-group is-empty-field' : 'form-group';
             ?>
             <div class="<?php echo $class_note; ?>">
-                <label for="note">Note:</label>
-                <textarea id="note" name="note" rows="2" oninput="autoResize(this)"><?php echo htmlspecialchars($note_pulita); ?></textarea>
+                <label for="note">Note Aggiuntive:</label>
+                <textarea id="note" name="note"><?php echo htmlspecialchars($note_pulita); ?></textarea>
             </div>
 
-            <!-- CARICAMENTO FILE MULTIPLI (VISIBILI SEMPRE A SCHERMO, NASCOSTI IN STAMPA) -->
-            <div class="form-group no-print nascondi-in-stampa">
-                <label for="allegati">Carica Nuovi Allegati / Video (puoi sceglierne più di uno insieme):</label>
-                <input type="file" id="allegati" name="allegati[]" multiple>
-                
-                <?php if (!empty($controllo['file_path'])): ?>
-                    <div style="margin-top: 12px; background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px solid #dee2e6;">
-                        <strong>Allegati e Video già caricati:</strong><br>
-                        <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px;">
-                            <?php 
-                            $lista_files = array_filter(array_map('trim', explode(',', $controllo['file_path'])));
-                            foreach ($lista_files as $idx => $path_f):
-                                if (empty($path_f)) continue;
-                                $ext_file = strtolower(pathinfo($path_f, PATHINFO_EXTENSION));
-                            ?>
-                                <div style="width: 100%; border-bottom: 1px solid #e9ecef; padding-bottom: 8px; margin-bottom: 8px;">
-                                    <a href="<?php echo htmlspecialchars($path_f); ?>" target="_blank" class="badge-allegato">📎 Apri file <?php echo ($idx + 1); ?> (.<?php echo $ext_file; ?>)</a>
-                                    
-                                    <?php if (in_array($ext_file, ['mp4', 'mov', 'avi', 'webm'])): ?>
-                                        <div style="margin-top: 8px;">
-                                            <video width="100%" controls style="max-height: 220px; border-radius: 4px; background: #000;">
-                                                <source src="<?php echo htmlspecialchars($path_f); ?>" type="video/<?php echo ($ext_file == 'mov') ? 'quicktime' : $ext_file; ?>">
-                                                Il tuo browser non supporta il tag video.
-                                            </video>
-                                        </div>
-                                    <?php endif; ?>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
+            <!-- GESTIONE ALLEGATI MULTIPLI -->
+            <div class="form-group no-print">
+                <label for="allegati">Allega File / Documenti / Immagini / Video:</label>
+                <input type="file" id="allegati" name="allegati[]" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.mp4,.mov,.avi,.webm,.svg">
+                <small style="color: #666; display: block; margin-top: 4px;">Puoi selezionare più file contemporaneamente (PDF, Immagini, Word, Video).</small>
+            </div>
+
+            <?php if (!empty($controllo['file_path'])): ?>
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>File allegati a questa visita:</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px;">
+                        <?php 
+                        $file_salvati = explode(',', $controllo['file_path']);
+                        foreach ($file_salvati as $f_path) {
+                            $f_path = trim($f_path);
+                            if (!empty($f_path)) {
+                                $nome_file_visivo = basename($f_path);
+                                ?>
+                                <a href="<?php echo htmlspecialchars($f_path); ?>" target="_blank" class="badge-allegato">📎 <?php echo htmlspecialchars($nome_file_visivo); ?></a>
+                                <?php
+                            }
+                        }
+                        ?>
                     </div>
-                <?php endif; ?>
-            </div>
-
-            <?php if (!empty($controllo['log_modifiche'])): ?>
-                <div class="form-group no-print" style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 0.85em; color: #666; border: 1px solid #e9ecef;">
-                    <strong>Cronologia Modifiche:</strong><br>
-                    <pre style="margin: 5px 0 0 0; white-space: pre-wrap; font-family: inherit;"><?php echo htmlspecialchars($controllo['log_modifiche']); ?></pre>
                 </div>
             <?php endif; ?>
 
-            <div style="margin-top: 20px;">
-                <button type="submit" class="btn-salva">💾 Salva Modifiche e File</button>
+            <?php if (!empty($controllo['log_modifiche'])): ?>
+                <div class="form-group no-print" style="margin-top: 15px; background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px dashed #ccc;">
+                    <label style="font-size: 0.85em; color: #666; margin-bottom: 3px;">Cronologia Modifiche:</label>
+                    <pre style="margin: 0; font-size: 0.8em; color: #444; white-space: pre-wrap; font-family: Arial, sans-serif;"><?php echo htmlspecialchars($controllo['log_modifiche']); ?></pre>
+                </div>
+            <?php endif; ?>
+
+            <div style="margin-top: 20px;" class="no-print">
+                <button type="submit" class="btn-salva">💾 Salva Modifiche Visita</button>
             </div>
         </form>
     </div>
 
-    <div class="card">
-        <h2>Programma e Storico Visite del Paziente</h2>
-        <?php if (!empty($storico_controlli)): ?>
-            <div style="overflow-x: auto;">
-                <table class="table-storico">
-                    <thead>
-                        <tr>
-                            <th>Data Visita</th>
-                            <th>Tipo Controllo</th>
-                            <th>Stato</th>
-                            <th>Allegati</th>
-                            <th class="no-print">Azione</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php 
-                        $oggi = date('Y-m-d');
-                        foreach ($storico_controlli as $item): 
-                            $id_item = $item['id'];
-                            $data_item = $item['data_controllo'] ?? '';
-                            $tipo_item = $item['tipo_controllo'] ?? 'Controllo';
-                            $stato_item = $item['stato'] ?? 'Programmato';
-                            $file_item = $item['file_path'] ?? '';
-                            
-                            $classe_badge = 'badge-passato';
-                            if ($data_item > $oggi) {
-                                $classe_badge = 'badge-futuro';
+    <!-- STORICO CONTROLLI DEL PAZIENTE -->
+    <?php if (!empty($storico_controlli)): ?>
+    <div class="card no-print">
+        <h2>Storico Clinico / Visite del Paziente</h2>
+        <div style="overflow-x: auto;">
+            <table class="table-storico">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Orario</th>
+                        <th>Tipo Controllo</th>
+                        <th>Diagnosi</th>
+                        <th>Stato</th>
+                        <th>Azione</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($storico_controlli as $item): 
+                        $s_id = $item['id'];
+                        $s_data = $item['data_controllo'] ?? '';
+                        $s_tipo = $item['tipo_controllo'] ?? '';
+                        $s_diag = $item['diagnosi'] ?? '';
+                        $s_stato = $item['stato'] ?? '';
+                        
+                        $s_orario = '';
+                        if (!empty($item['note'])) {
+                            if (preg_match('/(?:Orario:|@|\[ORARIO:)\s*(\d{2}:\d{2})?/i', $item['note'], $m) && !empty($m[1])) {
+                                $s_orario = $m[1];
                             }
-                            if ($id_item == $controllo_id) {
-                                $classe_badge = 'badge-corrente';
-                            }
-                        ?>
-                            <tr>
-                                <td><strong><?php echo htmlspecialchars($data_item); ?></strong></td>
-                                <td><?php echo htmlspecialchars($tipo_item); ?></td>
-                                <td><span class="<?php echo $classe_badge; ?>"><?php echo htmlspecialchars($stato_item); ?></span></td>
-                                <td>
-                                    <?php if (!empty($file_item)): 
-                                        $num_allegati = count(array_filter(explode(',', $file_item)));
-                                    ?>
-                                        <a href="visita.php?id=<?php echo urlencode($id_item); ?>" class="badge-allegato">📎 <?php echo $num_allegati; ?> file/i</a>
-                                    <?php else: ?>
-                                        <span style="color: #999; font-size: 0.85em;">Nessuno</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td class="no-print">
-                                    <?php if ($id_item == $controllo_id): ?>
-                                        <span style="font-size: 0.85em; color: #28a745; font-weight: bold;">(Visita Corrente)</span>
-                                    <?php else: ?>
-                                        <a href="visita.php?id=<?php echo urlencode($id_item); ?>" class="btn-indietro" style="padding: 3px 8px; font-size: 0.8em;">Apri</a>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php else: ?>
-            <p>Nessun altro controllo registrato per questo paziente.</p>
-        <?php endif; ?>
-    </div>
+                        }
+                        if (empty($s_orario) && !empty($item['created_at'])) {
+                            $s_orario = date('H:i', strtotime($item['created_at']));
+                        }
 
-    <!-- FIRMA PER LA STAMPA -->
+                        $classe_badge = 'badge-passato';
+                        if ($s_id == $controllo_id) {
+                            $classe_badge = 'badge-corrente';
+                        } elseif ($s_data > date('Y-m-d')) {
+                            $classe_badge = 'badge-futuro';
+                        }
+                    ?>
+                    <tr>
+                        <td>
+                            <span class="<?php echo $classe_badge; ?>"><?php echo htmlspecialchars($s_data); ?></span>
+                        </td>
+                        <td><?php echo htmlspecialchars($s_orario); ?></td>
+                        <td><?php echo htmlspecialchars($s_tipo); ?></td>
+                        <td><?php echo htmlspecialchars(mb_strimwidth($s_diag, 0, 50, '...')); ?></td>
+                        <td><?php echo htmlspecialchars($s_stato); ?></td>
+                        <td>
+                            <?php if ($s_id == $controllo_id): ?>
+                                <strong>(Visita Corrente)</strong>
+                            <?php else: ?>
+                                <a href="visita.php?id=<?php echo urlencode($s_id); ?>" class="btn-indietro" style="padding: 3px 8px; font-size: 0.8em;">Apri</a>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <div class="print-footer-signature">
         <table>
             <tr>
                 <td></td>
                 <td>
                     <div class="signature-box">
+                        <br><br>
                         <strong><?php echo htmlspecialchars($titolo_medico . ' ' . $nome_utente_completo); ?></strong><br>
-                        <span><?php echo htmlspecialchars($specializzazione_medico); ?></span><br>
-                        <span style="font-size: 8.5pt; color: #555;">Matricola: <?php echo htmlspecialchars($matricola_medico); ?></span>
+                        <span style="font-size: 8.5pt; color: #555;"><?php echo htmlspecialchars($specializzazione_medico); ?></span>
                     </div>
                 </td>
             </tr>
@@ -799,40 +795,33 @@ $note_pulita = trim($note_pulita);
     </div>
 
     <script>
-        function autoResize(textarea) {
-            textarea.style.height = 'auto';
-            textarea.style.height = textarea.scrollHeight + 'px';
+        // Auto-resize delle textarea in base al contenuto
+        function autoResizeTextareas() {
+            const textareas = document.querySelectorAll('textarea');
+            textareas.forEach(ta => {
+                ta.style.height = 'auto';
+                ta.style.height = (ta.scrollHeight + 4) + 'px';
+            });
         }
 
-        window.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('textarea').forEach(function(textarea) {
-                autoResize(textarea);
+        document.addEventListener('DOMContentLoaded', () => {
+            autoResizeTextareas();
+            const textareas = document.querySelectorAll('textarea');
+            textareas.forEach(ta => {
+                ta.addEventListener('input', () => {
+                    ta.style.height = 'auto';
+                    ta.style.height = (ta.scrollHeight + 4) + 'px';
+                });
             });
         });
 
         function preparaStampaEStampa() {
-            document.querySelectorAll('textarea, input[type="text"], input[type="date"], select').forEach(function(el) {
-                if (el.value && el.value.trim() !== '') {
-                    el.classList.remove('is-empty-field');
-                } else {
-                    el.classList.add('is-empty-field');
-                }
+            // Espande tutte le textarea prima di stampare per catturare tutto il testo
+            const textareas = document.querySelectorAll('textarea');
+            textareas.forEach(ta => {
+                ta.style.height = 'auto';
+                ta.style.height = (ta.scrollHeight + 10) + 'px';
             });
-
-            document.querySelectorAll('.card').forEach(function(card) {
-                var visibleFields = card.querySelectorAll('.form-group:not(.is-empty-field), .info-item:not(.is-empty-field)');
-                var hasVisibleContent = visibleFields.length > 0;
-                var h2 = card.querySelector('h2');
-                if (h2 && h2.textContent.trim() === 'Paziente') {
-                    hasVisibleContent = true; 
-                }
-                if (!hasVisibleContent) {
-                    card.style.display = 'none';
-                } else {
-                    card.style.display = 'block';
-                }
-            });
-
             window.print();
         }
     </script>
