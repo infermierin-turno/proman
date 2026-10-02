@@ -6,9 +6,54 @@ if (!isset($_SESSION['utente'])) {
     exit;
 }
 
-require_once 'config.php';
+// Configurazione credenziali Supabase se non definite altrove
+if (!defined('SUPABASE_URL')) {
+    define('SUPABASE_URL', getenv('SUPABASE_URL'));
+}
+if (!defined('SUPABASE_KEY')) {
+    define('SUPABASE_KEY', getenv('SUPABASE_KEY'));
+}
 
-// Recupero studio_id dalla sessione (assicurati che sia presente nel tuo sistema di login)
+// Inclusione helper API se presente, altrimenti definiamo la funzione di fallback
+if (file_exists(__DIR__ . '/api_helper_sangue.php')) {
+    require_once __DIR__ . '/api_helper_sangue.php';
+}
+
+if (!function_exists('supabase_request')) {
+    function supabase_request($endpoint, $method = 'GET', $data = null, $custom_headers = []) {
+        $url = SUPABASE_URL . '/rest/v1/' . $endpoint;
+        $headers = [
+            'apikey: ' . SUPABASE_KEY,
+            'Authorization: Bearer ' . SUPABASE_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=representation'
+        ];
+        if (!empty($custom_headers)) {
+            $headers = array_merge($headers, $custom_headers);
+        }
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+
+        if ($data !== null) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, is_array($data) ? json_encode($data) : $data);
+        }
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $decoded = json_decode($response, true);
+        if ($http_code >= 400) {
+            return ['error' => $decoded['message'] ?? $response];
+        }
+        return $decoded;
+    }
+}
+
+// Recupero studio_id dalla sessione
 $studio_id = $_SESSION['utente']['studio_id'] ?? null;
 
 if (!$studio_id) {
@@ -26,11 +71,25 @@ if (isset($_GET['elimina']) && !empty($_GET['elimina'])) {
     $doc_da_cancellare = supabase_request("repository?id=eq.$id_da_eliminare&studio_id=eq.$studio_id&select=file_url");
     
     if (!empty($doc_da_cancellare) && !isset($doc_da_cancellare['error'])) {
-        $percorso_file = $doc_da_cancellare[0]['file_url'];
+        $percorso_file_url = $doc_da_cancellare[0]['file_url'];
         
-        // Elimina file dal server
-        if (file_exists($percorso_file)) {
-            unlink($percorso_file);
+        // Estraiamo il nome del file dall'URL pubblico di Supabase Storage per eliminarlo dal bucket
+        // Esempio URL: .../storage/v1/object/public/repository/nomefile.pdf
+        $parti_url = explode('/repository/', $percorso_file_url);
+        if (isset($parti_url[1])) {
+            $nome_file_storage = $parti_url[1];
+            
+            // Chiamata cURL a Supabase Storage DELETE
+            $url_storage = SUPABASE_URL . '/storage/v1/object/repository/' . $nome_file_storage;
+            $ch = curl_init($url_storage);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . SUPABASE_KEY,
+                'Authorization: Bearer ' . SUPABASE_KEY
+            ]);
+            curl_exec($ch);
+            curl_close($ch);
         }
         
         // Elimina riga dal database
@@ -46,7 +105,7 @@ if (isset($_GET['elimina']) && !empty($_GET['elimina'])) {
     }
 }
 
-// 2. Gestione caricamento nuovo documento
+// 2. Gestione caricamento nuovo documento su Supabase Storage
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
     $titolo = trim($_POST['titolo'] ?? '');
     $descrizione = trim($_POST['descrizione'] ?? '');
@@ -54,19 +113,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
     if (empty($titolo) || !isset($_FILES['file_fisico']) || $_FILES['file_fisico']['error'] !== UPLOAD_ERR_OK) {
         $errore = "Titolo e un file valido sono obbligatori.";
     } else {
-        $cartella_upload = 'uploads/';
-        if (!is_dir($cartella_upload)) mkdir($cartella_upload, 0755, true);
+        $file_tmp = $_FILES['file_fisico']['tmp_name'];
+        $nome_originale = basename($_FILES['file_fisico']['name']);
+        $mime_type = mime_content_type($file_tmp);
+        
+        // Nome unico per il file nel bucket Supabase
+        $nome_file_storage = $studio_id . '_' . time() . '_' . preg_replace('/[^a-zA-Z0-9_\.-]/', '_', $nome_originale);
+        
+        // Endpoint Supabase Storage (Assicurati di creare un bucket pubblico chiamato 'repository' nella tua dashboard Supabase)
+        $url_storage = SUPABASE_URL . '/storage/v1/object/repository/' . $nome_file_storage;
+        $file_data = file_get_contents($file_tmp);
 
-        // Aggiunto studio_id nel nome del file per maggiore pulizia
-        $nome_file = $studio_id . '_' . time() . '_' . basename($_FILES['file_fisico']['name']);
-        $percorso_destinazione = $cartella_upload . $nome_file;
+        $ch = curl_init($url_storage);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $file_data);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_KEY,
+            'Authorization: Bearer ' . SUPABASE_KEY,
+            'Content-Type: ' . $mime_type
+        ]);
 
-        if (move_uploaded_file($_FILES['file_fisico']['tmp_name'], $percorso_destinazione)) {
+        $response_storage = curl_exec($ch);
+        $http_code_storage = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($http_code_storage >= 200 && $http_code_storage < 300) {
+            // URL pubblico permanente su Supabase Storage
+            $url_pubblico = SUPABASE_URL . '/storage/v1/object/public/repository/' . $nome_file_storage;
+
             $nuovo_doc = [
                 'titolo' => $titolo,
                 'descrizione' => $descrizione,
-                'file_url' => $percorso_destinazione,
-                'studio_id' => $studio_id // Inserimento multitenant
+                'file_url' => $url_pubblico,
+                'studio_id' => $studio_id
             ];
 
             $risultato = supabase_request('repository', 'POST', $nuovo_doc);
@@ -74,17 +154,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['elimina'])) {
             if (isset($risultato['error'])) {
                 $errore = "Errore DB: " . (is_array($risultato['error']) ? json_encode($risultato['error']) : $risultato['error']);
             } else {
-                $messaggio = "Documento caricato e salvato con successo!";
+                $messaggio = "Documento caricato e salvato con successo nel cloud!";
             }
         } else {
-            $errore = "Errore durante il caricamento del file sul server.";
+            $errore = "Errore durante il caricamento del file su Supabase Storage (HTTP $http_code_storage): " . $response_storage;
         }
     }
 }
 
 // Recupero documenti filtrati per studio_id
 $documenti = supabase_request("repository?studio_id=eq.$studio_id&order=created_at.desc&select=*");
-if (isset($documenti['error'])) {
+if (isset($documenti['error']) || !is_array($documenti)) {
     $documenti = [];
 }
 ?>
@@ -125,25 +205,29 @@ if (isset($documenti['error'])) {
     <?php if (!empty($errore)): ?><div class="alert alert-danger rounded-4"><?php echo htmlspecialchars($errore); ?></div><?php endif; ?>
 
     <div class="card border-0 shadow-sm rounded-4 p-4">
-        <table class="table table-hover align-middle">
-            <thead class="table-light small text-uppercase">
-                <tr><th>Titolo</th><th>Descrizione</th><th class="text-end">Azioni</th></tr>
-            </thead>
-            <tbody>
-                <?php foreach ($documenti as $doc): ?>
-                <tr>
-                    <td><div class="fw-bold text-dark"><i class="fa-solid fa-file-pdf text-danger me-2"></i><?php echo htmlspecialchars($doc['titolo']); ?></div></td>
-                    <td><span class="text-muted small"><?php echo htmlspecialchars($doc['descrizione'] ?? '-'); ?></span></td>
-                    <td class="text-end">
-                        <a href="<?php echo htmlspecialchars($doc['file_url']); ?>" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill me-1"><i class="fa-solid fa-download"></i></a>
-                        <a href="?elimina=<?php echo $doc['id']; ?>" class="btn btn-outline-danger btn-sm rounded-pill" onclick="return confirm('Sei sicuro di voler eliminare questo documento?')">
-                            <i class="fa-solid fa-trash"></i>
-                        </a>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light small text-uppercase">
+                    <tr><th>Titolo</th><th>Descrizione</th><th class="text-end">Azioni</th></tr>
+                </thead>
+                <tbody>
+                    <?php if (count($documenti) > 0): foreach ($documenti as $doc): ?>
+                    <tr>
+                        <td><div class="fw-bold text-dark"><i class="fa-solid fa-file-pdf text-danger me-2"></i><?php echo htmlspecialchars($doc['titolo']); ?></div></td>
+                        <td><span class="text-muted small"><?php echo htmlspecialchars($doc['descrizione'] ?? '-'); ?></span></td>
+                        <td class="text-end">
+                            <a href="<?php echo htmlspecialchars($doc['file_url']); ?>" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill me-1"><i class="fa-solid fa-download"></i></a>
+                            <a href="?elimina=<?php echo $doc['id']; ?>" class="btn btn-outline-danger btn-sm rounded-pill" onclick="return confirm('Sei sicuro di voler eliminare questo documento?')">
+                                <i class="fa-solid fa-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    <?php endforeach; else: ?>
+                    <tr><td colspan="3" class="text-center text-muted py-4">Nessun documento presente nel repository.</td></tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
